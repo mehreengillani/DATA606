@@ -1,0 +1,334 @@
+---
+title: "DATA 606 Data Project Proposal"
+author: "Mehreen Ali Gillani"
+output: html_document
+date: "2025-11-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+set.seed(1234)
+library(tidyverse)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+```
+
+
+
+### Data Preparation
+
+```{r}
+library(readr)
+#link to github data file 
+flights_data_url <- 'https://raw.githubusercontent.com/mehreengillani/DATA606/refs/heads/main/flights_data.csv'
+
+
+# read
+flights <- read_csv(flights_data_url)
+
+```
+
+```{r}
+# Data cleaning and preparation for domestic flights only
+flights_clean <- flights %>%
+  # Convert all column names to lowercase first
+  rename_with(tolower) %>%
+  filter(!is.na(passengers), !is.na(distance))
+
+# Create variables using only existing categories in the data
+flights_clean <- flights_clean %>%
+  mutate(
+    # Use only distance groups that actually exist in the data
+    distance_cat = case_when(
+      distance_group == 1 ~ "less than 500 miles",
+      distance_group == 2 ~ "500-999 miles", 
+      distance_group == 3 ~ "1000-1499 miles",
+      distance_group == 4 ~ "1500-1999 miles",
+      distance_group == 5 ~ "2000-2499 miles",
+      distance_group == 6 ~ "2500-2999 miles",
+      distance_group == 7 ~ "3000-3499 miles",
+      distance_group == 8 ~ "3500-3999 miles",
+      distance_group == 9 ~ "4000-4499 miles",
+      distance_group == 10 ~ "4500-4999 miles",
+      distance_group == 11 ~ "5000-5499 miles",
+      distance_group == 12 ~ "5500-5999 miles",
+      distance_group == 13 ~ "6000-6499 miles", 
+      distance_group == 15 ~ "7000-7499 miles",
+      TRUE ~ NA_character_  # Fixed: TRUE in uppercase
+    ),
+    
+    # Use only carrier groups that actually exist in domestic data
+    carrier_type = case_when(
+      carrier_group == 1 ~ "regional carriers",
+      carrier_group == 2 ~ "national carriers", 
+      carrier_group == 3 ~ "major carriers",
+      TRUE ~ NA_character_  # Fixed: TRUE in uppercase
+    ),
+    
+    # Create month names for better visualization
+    month_name = factor(month, 
+                       levels = 1:7,
+                       labels = c("jan", "feb", "mar", "apr", "may", "jun", "jul")),
+    
+    # Create route identifier
+    route = paste(origin, dest, sep = " - "),
+    
+    # Calculate simple load metrics
+    load_factor = passengers / 180
+  )
+
+# Remove rows with NA in critical categorical variables
+flights_clean <- flights_clean %>%
+  filter(!is.na(distance_cat), !is.na(carrier_type))
+
+# Factor the categorical variables with only existing levels
+existing_distance_cats <- c("less than 500 miles", "500-999 miles", "1000-1499 miles",
+                           "1500-1999 miles", "2000-2499 miles", "2500-2999 miles",
+                           "3000-3499 miles", "3500-3999 miles", "4000-4499 miles",
+                           "4500-4999 miles", "5000-5499 miles", "5500-5999 miles",
+                           "6000-6499 miles", "7000-7499 miles")
+
+existing_carrier_cats <- c("major carriers", "national carriers", "regional carriers")
+
+flights_clean$distance_cat <- factor(flights_clean$distance_cat,
+                                    levels = existing_distance_cats)
+
+flights_clean$carrier_type <- factor(flights_clean$carrier_type,
+                                    levels = existing_carrier_cats)
+
+# For analysis, create simplified distance categories based on actual data distribution
+flights_clean <- flights_clean %>%
+  mutate(
+    distance_simple = case_when(
+      distance_group %in% 1:2 ~ "short (<1000 mi)",
+      distance_group %in% 3:5 ~ "medium (1000-2499 mi)", 
+      distance_group %in% 6:10 ~ "long (2500-4999 mi)",
+      distance_group >= 11 ~ "very long (5000+ mi)"
+    ),
+    distance_simple = factor(distance_simple,
+                            levels = c("short (<1000 mi)", "medium (1000-2499 mi)",
+                                      "long (2500-4999 mi)", "very long (5000+ mi)"))
+  )
+
+
+
+
+kable(head(flights_clean)) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "400px")
+```
+
+
+### Research Questions
+
+**1. Seasonal Flight Operations:** How do flight frequencies vary across months and carrier types?
+Hypothesis: Summer months (June-July) will have the highest flight frequencies, with major carriers showing the most significant seasonal increases.
+  * Response: flight_count (Numerical)
+  * Explanatory: carrier_type (Categorical), month (Categorical) <br>
+  
+**2. Carrier Operational Strategies:** How do flight frequency patterns differ between carrier types?
+Hypothesis: Major carriers maintain more consistent flight frequencies year-round, while regional carriers show greater seasonal variation.
+  * Response: flight_count (Numerical)
+  * Explanatory: carrier_type (Categorical), month (Categorical) <br>
+  
+  
+**3. Market Dominance:** Which carriers dominate specific months in terms of flight operations?
+Hypothesis: A few major carriers dominate flight operations across all months, with seasonal carriers emerging in peak months.
+  * Response: flight_count (Numerical), market_share (Numerical)
+  * Explanatory: unique_carrier_name (Categorical), month (Categorical)
+
+####  Cases
+
+What are the cases, and how many are there?
+
+Each case represents a domestic flight segment operated by a U.S. carrier between two airports in a specific time period. There are 144875 observations in the cleaned dataset.
+
+### Data Collection
+
+Data is collected by the Bureau of Transportation Statistics (BTS) through mandatory reporting by all U.S. certified air carriers. Airlines submit Form 41 Traffic T-100 data, which includes detailed information about their scheduled domestic operations for 1-7 months in 2025, including passenger counts, freight, mail, and flight distances.
+
+### Type of Study
+
+What type of study is this (observational/experiment)?
+
+This is an observational study.
+
+### Data Source
+data is downloaded from: https://www.transtats.bts.gov/DL_SelectFields.aspx?gnoyr_VQ=FIL&QO_fu146_anzr=Nv4+Pn44vr45
+U.S. Department of Transportation, Bureau of Transportation Statistics, T-100 Domestic Segment Data.
+
+Response
+
+What is the response variable, and what type is it (numerical/categorical)?
+
+The response variable is passengers (number of passengers on the flight segment) and is numerical.
+
+Explanatory
+
+What is the explanatory variable, and what type is it (numerical/categorical)?
+
+The primary explanatory variable is distance (flight distance in miles) and is numerical. Additional exploratory variables include month (categorical) and carrier_type (categorical).
+
+### Relevant Summary Statistics
+
+Provide summary statistics relevant to your research question.
+
+```{r}
+# Summary statistics for main variable passengers
+summary(flights_clean$passengers)
+
+```
+```{r}
+# Summary statistics for distance
+summary(flights_clean$distance)
+```
+```{r}
+# Correlation between distance and passengers
+cor(flights_clean$distance, flights_clean$passengers, use = "complete.obs")
+```
+
+
+```{r}
+# Summary by distance categories
+table(flights_clean$distance_cat, useNA = 'ifany')
+```
+
+```{r}
+prop.table(table(flights_clean$distance_cat, useNA = 'ifany')) * 100
+```
+
+
+```{r}
+library(psych)
+
+# Passenger statistics by distance category
+describeBy(flights_clean$passengers, group = flights_clean$distance_cat, mat = TRUE)
+
+```
+### Visualizations
+```{r}
+# Visualizations
+ggplot(flights_clean, aes(x = passengers)) + 
+  geom_histogram(bins = 30, fill = "steelblue", alpha = 0.7) +
+  labs(title = "Distribution of passengers per Flight Segment",
+       x = "Number of passengers", y = "Frequency") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(flights_clean, aes(x = distance)) + 
+  geom_histogram(bins = 30, fill = "lightgreen", alpha = 0.7) +
+  labs(title = "Distribution of Flight distances",
+       x = "distance (miles)", y = "Frequency") +
+  theme_minimal()
+
+```
+
+####  Flight distance vs No. of passengers
+```{r}
+
+# Scatter plot with transparency to handle overlapping points
+p_main <- ggplot(flights_clean, aes(x = distance, y = passengers)) +
+  geom_point(alpha = 0.1, size = 0.5, color = "darkblue") +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  labs(title = "Flight distance vs. Number \n of passengers",
+       subtitle = paste("Correlation:", round(cor(flights_clean$distance, flights_clean$passengers, 
+                                                 use = "complete.obs"), 3)),
+       x = "distance (miles)",
+       y = "Number of passengers") +
+  theme_minimal()
+
+# Hexbin plot for better visualization of dense data
+p_hex <- ggplot(flights_clean, aes(x = distance, y = passengers)) +
+  geom_hex(bins = 50) +
+  scale_fill_viridis_c(option = "plasma") +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "distance vs passengers \n (Hexbin Density)",
+       x = "distance (miles)",
+       y = "Number of passengers",
+       fill = "Count") +
+  theme_minimal()
+
+# Display both versions
+p_main | p_hex
+```
+
+####  Total Flights by month
+
+```{r}
+# Calculate total flights by month
+monthly_flights <- flights_clean %>%
+  group_by(month) %>%
+  summarise(
+    total_flights = n(),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(total_flights))
+
+# Create month labels
+month_labels <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul")
+
+# Create proper month order while showing highest to lowest
+monthly_flights_ordered <- monthly_flights %>%
+  mutate(
+    month_name = factor(month, 
+                       levels = 1:7,
+                       labels = month_labels[1:7]),
+    rank = rank(-total_flights)
+  ) %>%
+  arrange(desc(total_flights))
+
+# Create the plot
+ggplot(monthly_flights_ordered, aes(x = reorder(month_name, -total_flights), 
+                                   y = total_flights,
+                                   fill = total_flights)) +
+  geom_col(alpha = 0.8) +
+  geom_text(aes(label = paste0(format(total_flights, big.mark = ","), 
+                              "\n(", rank, ")")), 
+            vjust = -0.08, size = 1.9, fontface = "bold") +
+  scale_fill_gradient(low = "lightblue", high = "darkblue", 
+                     name = "Total Flights") +
+  labs(title = "monthly Flight Volume (January - July)",
+       subtitle = "Ranked from highest to lowest, with rank numbers in parentheses",
+       x = "month",
+       y = "Total Number of Flights") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 10),
+        plot.subtitle = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+```
+
+```{r}
+# Correlation between distance and month
+cor(monthly_flights$month, monthly_flights$total_flights, use = "complete.obs")
+```
+
+There is a strong correlation between month and total flights
+
+####  Passenger by carrier
+
+```{r}
+
+# Top 10 carriers by average passengers
+top_carriers <- flights_clean %>%
+  group_by(unique_carrier_name) %>%
+  summarise(avg_passengers = mean(passengers, na.rm = TRUE),
+            n_flights = n()) %>%
+  filter(n_flights > 100) %>%  # Only carriers with sufficient data
+  arrange(desc(avg_passengers)) %>%
+  head(10)
+
+ggplot(top_carriers, aes(x = reorder(unique_carrier_name, avg_passengers), 
+                        y = avg_passengers, 
+                        fill = avg_passengers)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Top 10 Carriers by Average passengers per Flight",
+       x = "Carrier",
+       y = "Average Number of passengers") +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  theme_minimal()
+```
+
